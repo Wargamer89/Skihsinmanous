@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tower Defense - Roguelite Edition</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #222;
+            color: #fff;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        #game-container {
+            display: flex;
+            background-color: #333;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            position: relative; /* Necesario para el overlay de Game Over */
+        }
+        canvas {
+            background-color: #4CAF50; 
+            border: 2px solid #555;
+            cursor: crosshair;
+        }
+        #ui-panel {
+            width: 270px;
+            margin-left: 20px;
+            display: flex;
+            flex-direction: column;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        
+        /* ESTILOS STATS REDUCIDOS */
+        .stats {
+            background: #111;
+            padding: 8px;
+            border-radius: 5px;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        .stats h2 {
+            font-size: 16px;
+            margin: 0 0 5px 0;
+        }
+        .stats p {
+            margin: 2px 0;
+        }
+        .stats span { font-weight: bold; color: #FFD700; }
+        
+        .lang-container {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .lang-btn {
+            flex: 1;
+            background-color: #444;
+            margin: 0 2px;
+            padding: 5px;
+            font-size: 12px;
+        }
+        .lang-btn.active {
+            background-color: #2196F3;
+        }
+        button {
+            background-color: #555;
+            color: white;
+            border: none;
+            padding: 8px;
+            margin-bottom: 6px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 13px;
+        }
+        button:hover { background-color: #777; }
+        button.selected { background-color: #2196F3; border: 2px solid #fff; }
+        #upgrade-panel {
+            background: #111;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        .action-btn { font-weight: bold; font-size: 13px; }
+        #upgrade-all-btn { background-color: #8E24AA; margin-top: 5px; }
+        #upgrade-all-btn:hover { background-color: #AB47BC; }
+
+        /* PANTALLA DE GAME OVER */
+        #game-over-overlay {
+            display: none; 
+            position: absolute; 
+            top: 10px; left: 10px; /* Ajustado al padding del contenedor */
+            width: 800px; /* Ancho del canvas */
+            height: 600px; /* Alto del canvas */
+            background: rgba(0, 0, 0, 0.85); 
+            z-index: 10; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            border-radius: 4px;
+        }
+        #game-over-overlay h1 {
+            color: #F44336;
+            font-size: 50px;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px #000;
+        }
+        #game-over-text {
+            font-size: 24px;
+            margin-bottom: 30px;
+            font-weight: bold;
+        }
+        #play-again-btn {
+            background-color: #4CAF50;
+            font-size: 20px;
+            padding: 15px 40px;
+            border-radius: 8px;
+        }
+        #play-again-btn:hover {
+            background-color: #66BB6A;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="game-over-overlay">
+        <h1 id="t-game-over-title">Juego Terminado</h1>
+        <p id="game-over-text"></p>
+        <button id="play-again-btn" onclick="restartFromGameOver()"></button>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    
+    <div id="ui-panel">
+        <div class="lang-container">
+            <button id="lang-es" class="lang-btn active" onclick="setLanguage('es')">Español</button>
+            <button id="lang-en" class="lang-btn" onclick="setLanguage('en')">English</button>
+            <button id="lang-ja" class="lang-btn" onclick="setLanguage('ja')">日本語</button>
+        </div>
+
+        <div class="stats">
+            <h2><span id="t-wave">Oleada:</span> <span id="wave-display">0</span></h2>
+            <p><span id="t-lives">Vidas:</span> <span id="lives-display">20</span> 💖</p>
+            <p><span id="t-gold">Oro:</span> <span id="gold-display">150</span> 💰</p>
+        </div>
+
+        <div class="stats">
+            <h3 id="t-perm-title" style="margin: 0 0 5px 0; font-size: 14px;">Mejoras Permanentes</h3>
+            <p><span id="t-perm-gold">+ Oro inicial:</span> <span id="perm-gold">0</span></p>
+            <p><span id="t-perm-lives">+ Vidas:</span> <span id="perm-lives">0</span></p>
+            <p><span id="t-perm-tower">Torre gratis:</span> <span id="perm-tower">-</span></p>
+        </div>
+
+        <h3 id="t-build" style="margin: 5px 0; font-size: 15px;">Construir Torres</h3>
+        <button id="btn-basic" class="tower-btn selected" onclick="selectTower('basic')"></button>
+        <button id="btn-rapid" class="tower-btn" onclick="selectTower('rapid')"></button>
+        <button id="btn-sniper" class="tower-btn" onclick="selectTower('sniper')"></button>
+        <button id="btn-heavy" class="tower-btn" onclick="selectTower('heavy')"></button>
+
+        <button id="next-wave-btn" class="action-btn" onclick="startWave()" style="background-color: #4CAF50; margin-top: 5px;"></button>
+        <button id="rush-wave-btn" class="action-btn" onclick="rushWave()" style="background-color: #e53935;"></button>
+        <button id="upgrade-all-btn" class="action-btn" onclick="upgradeAllTowers()"></button>
+
+        <div id="upgrade-panel">
+            <h3 id="t-selected" style="margin: 0 0 5px 0; font-size: 14px;">Torre Seleccionada</h3>
+            <p style="margin: 5px 0;"><span id="t-lvl">Nvl:</span> <span id="tower-lvl"></span> | <span id="t-dmg">Daño:</span> <span id="tower-dmg"></span></p>
+            <button id="upgrade-btn" onclick="upgradeSelectedTower()" style="background-color: #ff9800; width: 100%; font-weight: bold; margin-top: 5px;"></button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- Traducciones (i18n) ---
+    const dict = {
+        es: {
+            wave: "Oleada:", lives: "Vidas:", gold: "Oro:", build: "Construir Torres",
+            basic: "🟦 Torre Básica ($50)<br><small>Balanceada</small>",
+            rapid: "🟨 Torre Rápida ($75)<br><small>Rápida, daño bajo</small>",
+            sniper: "🟪 Francotirador ($100)<br><small>Largo alcance, lenta</small>",
+            heavy: "⬛ Torre Pesada ($150)<br><small>Daño masivo, muy lenta</small>",
+            startWave: "Iniciar Oleada", rushWave: "¡Que vengan todos de golpe!",
+            upgradeAll: "🌟 Mejorar Todas ($)", selected: "Torre Seleccionada",
+            lvl: "Nvl:", dmg: "Daño:", btnUpgrade: "Mejorar ($", 
+            gameOverTitle: "Juego Terminado", gameOverText: "Llegaste a la oleada: ", playAgain: "Volver a jugar",
+            permTitle: "Mejoras Permanentes", permGold: "+ Oro inicial:", permLives: "+ Vidas:", permTower: "Torre gratis:"
+        },
+        en: {
+            wave: "Wave:", lives: "Lives:", gold: "Gold:", build: "Build Towers",
+            basic: "🟦 Basic Tower ($50)<br><small>Balanced stats</small>",
+            rapid: "🟨 Rapid Tower ($75)<br><small>Fast attack, low dmg</small>",
+            sniper: "🟪 Sniper Tower ($100)<br><small>Long range, slow attack</small>",
+            heavy: "⬛ Heavy Tower ($150)<br><small>High dmg, slow attack</small>",
+            startWave: "Start Next Wave", rushWave: "Send all enemies!",
+            upgradeAll: "🌟 Upgrade All Towers", selected: "Tower Selected",
+            lvl: "Lvl:", dmg: "Dmg:", btnUpgrade: "Upgrade ($", 
+            gameOverTitle: "Game Over", gameOverText: "You reached Wave: ", playAgain: "Play Again",
+            permTitle: "Permanent Upgrades", permGold: "+ Starting Gold:", permLives: "+ Lives:", permTower: "Free Tower:"
+        },
+        ja: {
+            wave: "ウェーブ:", lives: "ライフ:", gold: "ゴールド:", build: "タワーを建設",
+            basic: "🟦 基本タワー ($50)<br><small>バランス型</small>",
+            rapid: "🟨 速射タワー ($75)<br><small>攻撃速度が速い</small>",
+            sniper: "🟪 スナイパー ($100)<br><small>長距離、遅い</small>",
+            heavy: "⬛ 重タワー ($150)<br><small>大ダメージ、非常に遅い</small>",
+            startWave: "ウェーブ開始", rushWave: "全敵を呼ぶ！",
+            upgradeAll: "🌟 全て強化 ($)", selected: "選択中のタワー",
+            lvl: "Lv:", dmg: "ダメ:", btnUpgrade: "強化 ($", 
+            gameOverTitle: "ゲームオーバー", gameOverText: "到達ウェーブ: ", playAgain: "もう一度プレイ",
+            permTitle: "永久アップグレード", permGold: "+ 初期ゴールド:", permLives: "+ ライフ:", permTower: "無料タワー:"
+        }
+    };
+
+    let currentLang = 'es';
+
+    // --- Permanent Upgrades ---
+    let permanentUpgrades = {
+        bonusGold: 0,
+        bonusLives: 0,
+        freeTower: null
+    };
+
+    // Core Variables
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let gold = 150;
+    let lives = 20;
+    let wave = 0;
+    let enemies = [];
+    let towers = [];
+    let projectiles = [];
+    let selectedTowerType = 'basic';
+    let selectedTowerInstance = null;
+    let isWaveActive = false;
+    let enemiesToSpawn = [];
+    let spawnTimer = 0;
+
+    const path = [
+        {x: -20, y: 120}, {x: 650, y: 120}, 
+        {x: 650, y: 350}, {x: 150, y: 350}, 
+        {x: 150, y: 520}, {x: 820, y: 520}
+    ];
+
+    const towerDefinitions = {
+        basic:  { cost: 50,  range: 120, damage: 20,  cooldown: 60, color: '#2196F3' }, 
+        rapid:  { cost: 75,  range: 90,  damage: 8,   cooldown: 15, color: '#FFEB3B' }, 
+        sniper: { cost: 100, range: 300, damage: 60,  cooldown: 120, color: '#9C27B0' },
+        heavy:  { cost: 150, range: 140, damage: 120, cooldown: 180, color: '#212121' }  
+    };
+
+    const enemyDefinitions = {
+        normal: { hp: 50,   speed: 1.2, color: '#F44336', radius: 12, reward: 10 },
+        fast:   { hp: 30,   speed: 2.5, color: '#FF9800', radius: 10, reward: 15 },
+        tank:   { hp: 150,  speed: 0.7, color: '#8B0000', radius: 16, reward: 25 },
+        boss:   { hp: 1000, speed: 0.5, color: '#000000', radius: 25, reward: 150 }
+    };
+
+    // --- Language & UI Functions ---
+    function setLanguage(lang) {
+        currentLang = lang;
+        document.getElementById('lang-es').classList.remove('active');
+        document.getElementById('lang-en').classList.remove('active');
+        document.getElementById('lang-ja').classList.remove('active');
+        document.getElementById('lang-' + lang).classList.add('active');
+        updateUI();
+    }
+
+    function updateUI() {
+        const text = dict[currentLang];
+        
+        // Textos estáticos
+        document.getElementById('t-wave').innerText = text.wave;
+        document.getElementById('t-lives').innerText = text.lives;
+        document.getElementById('t-gold').innerText = text.gold;
+        document.getElementById('t-build').innerText = text.build;
+        document.getElementById('btn-basic').innerHTML = text.basic;
+        document.getElementById('btn-rapid').innerHTML = text.rapid;
+        document.getElementById('btn-sniper').innerHTML = text.sniper;
+        document.getElementById('btn-heavy').innerHTML = text.heavy;
+        document.getElementById('next-wave-btn').innerText = text.startWave;
+        document.getElementById('rush-wave-btn').innerText = text.rushWave;
+        document.getElementById('upgrade-all-btn').innerText = text.upgradeAll;
+        document.getElementById('t-selected').innerText = text.selected;
+        document.getElementById('t-lvl').innerText = text.lvl;
+        document.getElementById('t-dmg').innerText = text.dmg;
+        
+        // Textos del panel de mejoras
+        document.getElementById('t-perm-title').innerText = text.permTitle;
+        document.getElementById('t-perm-gold').innerText = text.permGold;
+        document.getElementById('t-perm-lives').innerText = text.permLives;
+        document.getElementById('t-perm-tower').innerText = text.permTower;
+
+        // Textos de Game Over
+        document.getElementById('t-game-over-title').innerText = text.gameOverTitle;
+        document.getElementById('play-again-btn').innerText = text.playAgain;
+
+        // Stats dinámicas
+        document.getElementById('gold-display').innerText = gold;
+        document.getElementById('lives-display').innerText = lives;
+        document.getElementById('wave-display').innerText = wave;
+        
+        // Mejoras permanentes UI
+        document.getElementById('perm-gold').innerText = permanentUpgrades.bonusGold;
+        document.getElementById('perm-lives').innerText = permanentUpgrades.bonusLives;
+        
+        // Diccionario visual simple para la torre gratis
+        const towerNames = {
+            'basic': '🟦', 'rapid': '🟨', 'sniper': '🟪', 'heavy': '⬛'
+        };
+        document.getElementById('perm-tower').innerText = permanentUpgrades.freeTower ? towerNames[permanentUpgrades.freeTower] : "-";
+        
+        if (selectedTowerInstance) {
+            document.getElementById('upgrade-panel').style.display = 'block';
+            document.getElementById('tower-lvl').innerText = selectedTowerInstance.level;
+            document.getElementById('tower-dmg').innerText = Math.floor(selectedTowerInstance.damage);
+            document.getElementById('upgrade-btn').innerText = text.btnUpgrade + selectedTowerInstance.getUpgradeCost() + ")";
+        } else {
+            document.getElementById('upgrade-panel').style.display = 'none';
+        }
+    }
+
+    function selectTower(type) {
+        selectedTowerType = type;
+        document.querySelectorAll('.tower-btn').forEach(btn => btn.classList.remove('selected'));
+        document.getElementById('btn-' + type).classList.add('selected');
+        selectedTowerInstance = null; 
+        updateUI();
+    }
+
+    // --- Clases ---
+    class Enemy {
+        constructor(type, hpMultiplier) {
+            this.def = enemyDefinitions[type];
+            this.hp = this.def.hp * hpMultiplier;
+            this.maxHp = this.hp;
+            this.speed = this.def.speed;
+            this.color = this.def.color;
+            this.radius = this.def.radius;
+            this.reward = this.def.reward;
+            this.waypointIndex = 0;
+            this.x = path[0].x;
+            this.y = path[0].y;
+        }
+
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = 'red';
+            ctx.fillRect(this.x - 15, this.y - 20, 30, 4);
+            ctx.fillStyle = 'lightgreen';
+            ctx.fillRect(this.x - 15, this.y - 20, 30 * (this.hp / this.maxHp), 4);
+        }
+
+        update() {
+            const target = path[this.waypointIndex + 1];
+            if (!target) return;
+
+            const dx = target.x - this.x;
+            const dy = target.y - this.y;
+            const dist = Math.hypot(dx, dy);
+
+            if (dist < this.speed) {
+                this.x = target.x;
+                this.y = target.y;
+                this.waypointIndex++;
+                if (this.waypointIndex >= path.length - 1) {
+                    lives--;
+                    this.hp = 0; 
+                    updateUI();
+                    if (lives <= 0) handleGameOver(); // Llamamos al nuevo Game Over
+                }
+            } else {
+                this.x += (dx / dist) * this.speed;
+                this.y += (dy / dist) * this.speed;
+            }
+        }
+    }
+
+    class Tower {
+        constructor(x, y, type) {
+            this.x = x;
+            this.y = y;
+            this.type = type;
+            this.def = towerDefinitions[type];
+            this.range = this.def.range;
+            this.damage = this.def.damage;
+            this.cooldown = this.def.cooldown;
+            this.color = this.def.color;
+            this.timer = 0;
+            this.level = 1;
+            this.width = 30;
+        }
+
+        getUpgradeCost() {
+            return Math.floor(this.def.cost * 0.8 * this.level);
+        }
+
+        upgrade() {
+            const cost = this.getUpgradeCost();
+            if (gold >= cost) {
+                gold -= cost;
+                this.level++;
+                this.damage *= 1.3; 
+                this.range *= 1.05; 
+                return true; 
+            }
+            return false;
+        }
+
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x - this.width/2, this.y - this.width/2, this.width, this.width);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText("L" + this.level, this.x, this.y + 4);
+
+            if (selectedTowerInstance === this) {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.range, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
+        update() {
+            if (this.timer > 0) this.timer--;
+
+            if (this.timer === 0) {
+                let target = null;
+                let minDist = this.range;
+
+                for (let e of enemies) {
+                    let dist = Math.hypot(e.x - this.x, e.y - this.y);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        target = e;
+                    }
+                }
+
+                if (target) {
+                    projectiles.push(new Projectile(this.x, this.y, target, this.damage));
+                    this.timer = this.cooldown;
+                }
+            }
+        }
+    }
+
+    class Projectile {
+        constructor(x, y, target, damage) {
+            this.x = x;
+            this.y = y;
+            this.target = target;
+            this.damage = damage;
+            this.speed = 8;
+        }
+
+        draw() {
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        update() {
+            const dx = this.target.x - this.x;
+            const dy = this.target.y - this.y;
+            const dist = Math.hypot(dx, dy);
+
+            if (dist < this.speed) {
+                this.target.hp -= this.damage;
+                if (this.target.hp <= 0) {
+                    gold += this.target.reward;
+                    updateUI();
+                }
+                return false; 
+            } else {
+                this.x += (dx / dist) * this.speed;
+                this.y += (dy / dist) * this.speed;
+                return true; 
+            }
+        }
+    }
+
+    // --- Sistema Roguelite y Game Over ---
+    function handleGameOver() {
+        // Mostrar overlay en lugar de la alerta
+        const overlay = document.getElementById('game-over-overlay');
+        const textElem = document.getElementById('game-over-text');
+        
+        textElem.innerText = dict[currentLang].gameOverText + wave;
+        overlay.style.display = 'flex';
+        
+        // Calcular mejoras permanentes (incrementales)
+        permanentUpgrades.bonusGold += 25;
+        permanentUpgrades.bonusLives += 2;
+        
+        // Torre gratis aleatoria (no acumulativa)
+        const towerTypes = ['basic', 'rapid', 'sniper', 'heavy'];
+        permanentUpgrades.freeTower = towerTypes[Math.floor(Math.random() * towerTypes.length)];
+    }
+
+    function restartFromGameOver() {
+        // Ocultar overlay
+        document.getElementById('game-over-overlay').style.display = 'none';
+        
+        // Reiniciar variables y aplicar mejoras
+        resetGame();
+        
+        // Volver a iniciar el ciclo del juego
+        gameLoop();
+    }
+
+    function resetGame() {
+        gold = 150 + permanentUpgrades.bonusGold;
+        lives = 20 + permanentUpgrades.bonusLives;
+        wave = 0;
+
+        enemies = [];
+        towers = [];
+        projectiles = [];
+        enemiesToSpawn = [];
+        isWaveActive = false;
+
+        selectedTowerInstance = null;
+
+        // Dar torre gratis en un punto fijo inicial (cerca del primer cruce)
+        if (permanentUpgrades.freeTower) {
+            towers.push(new Tower(200, 200, permanentUpgrades.freeTower));
+        }
+
+        updateUI();
+    }
+
+    // --- Interacción ---
+    canvas.addEventListener('click', (e) => {
+        // No permitir construir si el juego terminó
+        if (lives <= 0) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+
+        for (let t of towers) {
+            if (Math.hypot(t.x - mx, t.y - my) < 20) {
+                selectedTowerInstance = t;
+                updateUI();
+                return;
+            }
+        }
+
+        const def = towerDefinitions[selectedTowerType];
+        if (gold >= def.cost) {
+            towers.push(new Tower(mx, my, selectedTowerType));
+            gold -= def.cost;
+            selectedTowerInstance = towers[towers.length - 1];
+            updateUI();
+        }
+    });
+
+    function upgradeSelectedTower() {
+        if (selectedTowerInstance) {
+            if (selectedTowerInstance.upgrade()) {
+                updateUI();
+            }
+        }
+    }
+
+    function upgradeAllTowers() {
+        let upgradedAny = false;
+        for (let t of towers) {
+            while (gold >= t.getUpgradeCost()) {
+                t.upgrade();
+                upgradedAny = true;
+            }
+        }
+        if (upgradedAny) {
+            updateUI();
+        }
+    }
+
+    // --- Lógica de Oleadas ---
+    function startWave() {
+        if (lives <= 0) return; // Prevenir inicio de oleada si perdiste
+
+        wave++;
+        isWaveActive = true;
+        
+        let hpMultiplier = 1 + (wave * 0.2); 
+        let count = 5 + (wave * 2);
+
+        if (wave % 5 === 0) {
+            enemiesToSpawn.push(new Enemy('boss', hpMultiplier));
+            count = Math.floor(count / 2); 
+        }
+
+        for (let i = 0; i < count; i++) {
+            let r = Math.random();
+            let type = 'normal';
+            if (wave > 2 && r > 0.6) type = 'fast';
+            if (wave > 3 && r > 0.8) type = 'tank';
+            enemiesToSpawn.push(new Enemy(type, hpMultiplier));
+        }
+
+        updateUI();
+    }
+
+    function rushWave() {
+        if (lives <= 0) return;
+
+        if (enemiesToSpawn.length === 0) {
+            startWave();
+        }
+        let staggerDistance = 0; 
+        while (enemiesToSpawn.length > 0) {
+            let e = enemiesToSpawn.shift();
+            e.x -= staggerDistance; 
+            enemies.push(e);
+            staggerDistance += 12; 
+        }
+    }
+
+    // --- Bucle Principal ---
+    function gameLoop() {
+        ctx.fillStyle = '#4CAF50';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.strokeStyle = '#e0c097'; 
+        ctx.lineWidth = 45; 
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(path[0].x, path[0].y);
+        for (let i = 1; i < path.length; i++) {
+            ctx.lineTo(path[i].x, path[i].y);
+        }
+        ctx.stroke();
+
+        if (isWaveActive) {
+            spawnTimer++;
+            if (spawnTimer > 60 && enemiesToSpawn.length > 0) {
+                enemies.push(enemiesToSpawn.shift());
+                spawnTimer = 0;
+            } else if (enemiesToSpawn.length === 0 && enemies.length === 0) {
+                isWaveActive = false; 
+            }
+        }
+
+        for (let t of towers) {
+            t.update();
+            t.draw();
+        }
+
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+            let p = projectiles[i];
+            p.draw();
+            if (p.target.hp <= 0 || !p.update()) {
+                projectiles.splice(i, 1);
+            }
+        }
+
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            let e = enemies[i];
+            e.draw();
+            e.update();
+            if (e.hp <= 0) {
+                enemies.splice(i, 1);
+            }
+        }
+
+        // El juego solo avanza en sus frames si tienes vidas
+        if (lives > 0) {
+            requestAnimationFrame(gameLoop);
+        }
+    }
+
+    // Inicializar
+    updateUI();
+    gameLoop();
+</script>
+
+</body>
+</html>
